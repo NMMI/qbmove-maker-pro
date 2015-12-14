@@ -432,8 +432,8 @@ void paramSet(uint16 param_type)
         //-----------------------------------------------     Set Position Limit
         case PARAM_POS_LIMIT:
             for (i = 0; i < NUM_OF_MOTORS; i++) {
-                g_mem.pos_lim_inf[i] = *((int16 *) &g_rx.buffer[3 + (i * 4)]);
-                g_mem.pos_lim_sup[i] = *((int16 *) &g_rx.buffer[3 + (i * 4) + 2]);
+                g_mem.pos_lim_inf[i] = *((int32 *) &g_rx.buffer[3 + (i * 2 * 4)]);
+                g_mem.pos_lim_sup[i] = *((int32 *) &g_rx.buffer[3 + (i * 2 * 4) + 4]);
 
                 g_mem.pos_lim_inf[i] = g_mem.pos_lim_inf[i] << g_mem.res[i];
                 g_mem.pos_lim_sup[i] = g_mem.pos_lim_sup[i] << g_mem.res[i];
