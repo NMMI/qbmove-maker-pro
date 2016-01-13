@@ -59,7 +59,7 @@ void commProcess(void){
         case CMD_ACTIVATE:
             g_ref.onoff = g_rx.buffer[1];
 
-            if (g_mem.control_mode == CONTROL_ANGLE) {
+            if (c_mem.control_mode == CONTROL_ANGLE) {
                 g_ref.pos[0] = g_meas.pos[0];
                 g_ref.pos[1] = g_meas.pos[1];
             }
@@ -74,10 +74,10 @@ void commProcess(void){
 
         case CMD_SET_INPUTS:
             g_ref.pos[0] = *((int16 *) &g_rx.buffer[1]);   // motor 1
-            g_ref.pos[0] = g_ref.pos[0] << g_mem.res[0];
+            g_ref.pos[0] = g_ref.pos[0] << c_mem.res[0];
 
             g_ref.pos[1] = *((int16 *) &g_rx.buffer[3]);   // motor 2
-            g_ref.pos[1] = g_ref.pos[1] << g_mem.res[1];
+            g_ref.pos[1] = g_ref.pos[1] << c_mem.res[1];
 
             if (c_mem.pos_lim_flag) {                      // pos limiting
                 if (g_ref.pos[0] < c_mem.pos_lim_inf[0]) g_ref.pos[0] = c_mem.pos_lim_inf[0];
@@ -96,7 +96,7 @@ void commProcess(void){
             stiff = *((int16 *) &g_rx.buffer[3]);    // stiffness
 
             // position in ticks
-            pos = pos << g_mem.res[0];
+            pos = pos << c_mem.res[0];
 
             // position limit
             if (pos > (c_mem.pos_lim_sup[0] - c_mem.max_stiffness))
@@ -126,7 +126,7 @@ void commProcess(void){
 
             for (i = 0; i < NUM_OF_SENSORS; i++) {
                 *((int16 *) &packet_data[(i*2) + 1]) = (int16)
-                (g_meas.pos[i] >> g_mem.res[i]);
+                (g_meas.pos[i] >> c_mem.res[i]);
             }
 
             packet_data[packet_lenght - 1] =
@@ -168,7 +168,7 @@ void commProcess(void){
             // Positions
             for (i = 0; i < NUM_OF_SENSORS; i++) {
                 *((int16 *) &packet_data[(i*2) + 5]) = (int16)
-                (g_meas.pos[i] >> g_mem.res[i]);
+                (g_meas.pos[i] >> c_mem.res[i]);
             }
 
             packet_data[packet_lenght - 1] =
@@ -214,8 +214,8 @@ void commProcess(void){
         case CMD_GET_INPUTS:
             packet_lenght = 6;
 
-            pos_1 = g_ref.pos[0]  >> g_mem.res[0];
-            pos_2 = g_ref.pos[1]  >> g_mem.res[1];
+            pos_1 = g_ref.pos[0] >> c_mem.res[0];
+            pos_2 = g_ref.pos[1] >> c_mem.res[1];
 
             *((int16 *) &packet_data[1]) = (int16) (pos_1);
             *((int16 *) &packet_data[3]) = (int16) (pos_2);
@@ -405,7 +405,7 @@ void paramSet(uint16 param_type)
             for(i = 0; i < NUM_OF_SENSORS; ++i)
             {
                 g_mem.m_off[i] = *((int16 *) &g_rx.buffer[3 + i * 2]);
-                g_mem.m_off[i] = g_mem.m_off[i] << g_mem.res[i];
+                g_mem.m_off[i] = g_mem.m_off[i] << c_mem.res[i];
 
                 g_meas.rot[i] = 0;
             }
@@ -432,8 +432,8 @@ void paramSet(uint16 param_type)
                 g_mem.pos_lim_inf[i] = *((int32 *) &g_rx.buffer[3 + (i * 2 * 4)]);
                 g_mem.pos_lim_sup[i] = *((int32 *) &g_rx.buffer[3 + (i * 2 * 4) + 4]);
 
-                g_mem.pos_lim_inf[i] = g_mem.pos_lim_inf[i] << g_mem.res[i];
-                g_mem.pos_lim_sup[i] = g_mem.pos_lim_sup[i] << g_mem.res[i];
+                g_mem.pos_lim_inf[i] = g_mem.pos_lim_inf[i] << c_mem.res[i];
+                g_mem.pos_lim_sup[i] = g_mem.pos_lim_sup[i] << c_mem.res[i];
 
             }
             break;
@@ -705,25 +705,25 @@ void infoPrepare(unsigned char *info_string)
         strcat(info_string,"\r\n");
     }
 
-    sprintf(str, "Position limit active: %d", (int)g_mem.pos_lim_flag);
+    sprintf(str, "Position limit active: %d", (int)c_mem.pos_lim_flag);
     strcat(info_string, str);
     strcat(info_string,"\r\n");
 
     for (i = 0; i < NUM_OF_MOTORS; i++) {
         sprintf(str, "Position limit motor %d: inf -> %ld  ", (int)(i + 1),
-                (int32)g_mem.pos_lim_inf[i] >> g_mem.res[i]);
+                (int32)c_mem.pos_lim_inf[i] >> c_mem.res[i]);
         strcat(info_string, str);
 
         sprintf(str, "sup -> %ld\r\n",
-                (int32)g_mem.pos_lim_sup[i] >> g_mem.res[i]);
+                (int32)c_mem.pos_lim_sup[i] >> c_mem.res[i]);
         strcat(info_string, str);
     }
 
-    sprintf(str, "Max stiffness: %d", (int)g_mem.max_stiffness >> g_mem.res[0]);
+    sprintf(str, "Max stiffness: %d", (int)c_mem.max_stiffness >> c_mem.res[0]);
     strcat(info_string, str);
     strcat(info_string,"\r\n");
 
-    sprintf(str, "Current limit: %d", (int)g_mem.current_limit);
+    sprintf(str, "Current limit: %d", (int)c_mem.current_limit);
     strcat(info_string, str);
     strcat(info_string,"\r\n");
 
@@ -744,7 +744,7 @@ void commWrite(uint8 *packet_data, uint16 packet_lenght)
     UART_RS485_PutChar(':');
     UART_RS485_PutChar(':');
     // frame - ID
-    UART_RS485_PutChar(g_mem.id);
+    UART_RS485_PutChar(c_mem.id);
     // frame - length
     UART_RS485_PutChar((uint8)packet_lenght);
     // frame - packet data

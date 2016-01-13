@@ -435,7 +435,7 @@ void motor_control(uint8 index) {
         case CONTROL_CURRENT:
 
             // Current ref from pos ref
-            curr_ref = g_ref.pos[index] >> g_mem.res[index];
+            curr_ref = g_ref.pos[index] >> c_mem.res[index];
 
             // saturate max current
             if (curr_ref > c_mem.current_limit) {
@@ -505,7 +505,7 @@ void motor_control(uint8 index) {
 
         case CONTROL_PWM:
             // Direct PWM value
-            pwm_input = g_ref.pos[index] >> g_mem.res[index];
+            pwm_input = g_ref.pos[index] >> c_mem.res[index];
 
             switch(index) {
                 case 0:
@@ -685,7 +685,7 @@ void encoder_reading(uint8 index)
                                                     // invert sign of sensor
 
         // Add offset and crop to 16bit
-        value_encoder  = (int16)(value_encoder + g_mem.m_off[index]);
+        value_encoder  = (int16)(value_encoder + c_mem.m_off[index]);
 
         // Initialize last_value_encoder
         if (only_first_time) {
