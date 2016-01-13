@@ -41,9 +41,7 @@ void commProcess(void){
     uint8 packet_data[16];
     uint8 packet_lenght;
     int32 pos_1, pos_2;
-    int32  pos, stiff;
-    uint32 off_1, off_2;
-    uint32 mult_1, mult_2;
+    int32 pos, stiff;
 
     rx_cmd = g_rx.buffer[0];
 
@@ -253,28 +251,27 @@ void commProcess(void){
 
 //=========================================================     CMD_STORE_PARAMS
         case CMD_STORE_PARAMS:
-            if( c_mem.input_mode == INPUT_MODE_EXTERNAL )
-            {
-                off_1 = c_mem.m_off[0];
-                off_2 = c_mem.m_off[1];
-                mult_1 = c_mem.m_mult[0];
-                mult_2 = c_mem.m_mult[1];
-
-                g_ref.pos[0] /= mult_1;
-                g_ref.pos[1] /= mult_2;
+            // Before storing parameters, c_mem and g_mem are different.
+            // We need to adjust reference positions according to new values (g_mem)
+            
+            if((c_mem.m_mult[0] != g_mem.m_mult[0]) || (c_mem.m_mult[1] != g_mem.m_mult[1])) {
+                g_ref.pos[0] /= c_mem.m_mult[0];
+                g_ref.pos[1] /= c_mem.m_mult[1];
                 g_ref.pos[0] *= g_mem.m_mult[0];
                 g_ref.pos[1] *= g_mem.m_mult[1];
+            }
 
-                g_ref.pos[0] +=  g_mem.m_off[0] - off_1;
-                g_ref.pos[1] +=  g_mem.m_off[1] - off_2;
+            if((c_mem.m_off[0] != g_mem.m_off[0]) || c_mem.m_off[1] != g_mem.m_off[1]) {
+                g_ref.pos[0] +=  g_mem.m_off[0] - c_mem.m_off[0];
+                g_ref.pos[1] +=  g_mem.m_off[1] - c_mem.m_off[1];
+            }
 
-                if (c_mem.pos_lim_flag) {                   // position limiting
-                    if (g_ref.pos[0] < c_mem.pos_lim_inf[0]) g_ref.pos[0] = c_mem.pos_lim_inf[0];
-                    if (g_ref.pos[1] < c_mem.pos_lim_inf[1]) g_ref.pos[1] = c_mem.pos_lim_inf[1];
+            if (c_mem.pos_lim_flag) {                   // position limiting
+                if (g_ref.pos[0] < c_mem.pos_lim_inf[0]) g_ref.pos[0] = c_mem.pos_lim_inf[0];
+                if (g_ref.pos[1] < c_mem.pos_lim_inf[1]) g_ref.pos[1] = c_mem.pos_lim_inf[1];
 
-                    if (g_ref.pos[0] > c_mem.pos_lim_sup[0]) g_ref.pos[0] = c_mem.pos_lim_sup[0];
-                    if (g_ref.pos[1] > c_mem.pos_lim_sup[1]) g_ref.pos[1] = c_mem.pos_lim_sup[1];
-                }
+                if (g_ref.pos[0] > c_mem.pos_lim_sup[0]) g_ref.pos[0] = c_mem.pos_lim_sup[0];
+                if (g_ref.pos[1] > c_mem.pos_lim_sup[1]) g_ref.pos[1] = c_mem.pos_lim_sup[1];
             }
 
             if ( memStore(0) ) {
