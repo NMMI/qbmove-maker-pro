@@ -405,7 +405,7 @@ void paramSet(uint16 param_type)
             for(i = 0; i < NUM_OF_SENSORS; ++i)
             {
                 g_mem.m_off[i] = *((int16 *) &g_rx.buffer[3 + i * 2]);
-                g_mem.m_off[i] = g_mem.m_off[i] << c_mem.res[i];
+                g_mem.m_off[i] = g_mem.m_off[i] << g_mem.res[i];
 
                 g_meas.rot[i] = 0;
             }

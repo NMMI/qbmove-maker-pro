@@ -685,7 +685,7 @@ void encoder_reading(uint8 index)
                                                     // invert sign of sensor
 
         // Add offset and crop to 16bit
-        value_encoder  = (int16)(value_encoder + c_mem.m_off[index]);
+        value_encoder  = (int16)(value_encoder + g_mem.m_off[index]);
 
         // Initialize last_value_encoder
         if (only_first_time) {
