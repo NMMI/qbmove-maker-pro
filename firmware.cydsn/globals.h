@@ -28,7 +28,7 @@
 //                                                                        DEVICE
 //==============================================================================
 
-#define VERSION         "QBMMP v5.3.2"
+#define VERSION         "QBMMP v5.4.0"
 
 #define NUM_OF_MOTORS           2
 #define NUM_OF_SENSORS          3
@@ -141,12 +141,39 @@ struct st_mem {
 
 //=================================================     device related variables
 
-struct st_dev{
+struct st_dev {
 
     int32   tension;                // Power supply tension
     float   tension_conv_factor;    // Used to calculate input tension
     uint8   tension_valid;
     uint8   pwm_limit;
+
+};
+
+//=================================================     counters to debug commands sent
+
+struct st_count {
+
+    uint16  activ;
+    uint16  set_inputs;
+    uint16  set_pos_stiff;
+    uint16  get_meas;
+    uint16  get_curr;
+    uint16  get_curr_meas;
+    uint16  get_vel;
+    uint16  get_activ;
+    uint16  get_inputs;
+    uint16  get_info;
+    uint16  set_param;
+    uint16  get_param;
+    uint16  ping;
+    uint16  store_param;
+    uint16  store_default;
+    uint16  restore;
+    uint16  init;
+    uint16  bootloader;
+    uint16  calibrate;
+    uint16  get_counts;
 
 };
 
@@ -171,6 +198,7 @@ extern struct st_meas   g_meas;         // measurements
 extern struct st_data   g_rx;           // income data
 extern struct st_mem    g_mem, c_mem;   // memory
 extern struct st_dev    device;         //device related variables
+extern struct st_count  g_count;
 
 extern uint32 timer_value;
 

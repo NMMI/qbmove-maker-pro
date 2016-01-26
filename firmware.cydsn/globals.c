@@ -18,11 +18,12 @@
 //=============================================      global variables definition
 
 
-struct st_ref   g_ref;                  // motor variables
-struct st_meas  g_meas;                 // measurements
-struct st_data  g_rx;                   // income data
-struct st_mem   g_mem, c_mem;           // memory
-struct st_dev   device;                 // device related variables
+struct st_ref   	g_ref;                  // motor variables
+struct st_meas  	g_meas;                 // measurements
+struct st_data  	g_rx;                   // income data
+struct st_mem   	g_mem, c_mem;           // memory
+struct st_dev   	device;                 // device related variables
+struct st_count		g_count;				// counters to debug commands sent
 
 uint32 timer_value;
 
