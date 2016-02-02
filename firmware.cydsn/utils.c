@@ -89,9 +89,26 @@ int32 filter_vel_3(int32 new_value) {
 
 void reset_counters()
 {
-    uint8 i;
-    for(i = 0; i < sizeof(g_count); i++)
-       ((uint16*) &g_count.activ)[i] = 0;
+    g_count.activ = 0;
+    g_count.set_inputs = 0;
+    g_count.set_pos_stiff = 0;
+    g_count.get_meas = 0;
+    g_count.get_curr = 0;
+    g_count.get_curr_meas = 0;
+    g_count.get_vel = 0;
+    g_count.get_activ = 0;
+    g_count.get_inputs = 0;
+    g_count.get_info = 0;
+    g_count.set_param = 0;
+    g_count.get_param = 0;
+    g_count.ping = 0;
+    g_count.store_param = 0;
+    g_count.store_default = 0;
+    g_count.restore = 0;
+    g_count.init = 0;
+    g_count.bootloader = 0;
+    g_count.calibrate = 0;
+    g_count.get_counts = 0;
 }
 
 
