@@ -59,7 +59,7 @@ void commProcess(void){
         case CMD_ACTIVATE:
             g_ref.onoff = g_rx.buffer[1];
 
-            if (c_mem.control_mode == CONTROL_ANGLE) {
+            if (c_mem.control_mode == CONTROL_ANGLE && !c_mem.deflection_control) {
                 g_ref.pos[0] = g_meas.pos[0];
                 g_ref.pos[1] = g_meas.pos[1];
             }
