@@ -493,6 +493,11 @@ void paramSet(uint16 param_type)
             g_mem.current_limit = *((int16*) &g_rx.buffer[3]);
             break;
 
+        //-------------------------------------     Set Deflection control flag
+        case PARAM_DEFLECTION_CONTROL:
+            g_mem.deflection_control = *((uint8 *) &g_rx.buffer[3]);
+            break;
+
     }
     sendAcknowledgment(ACK_OK);
 }
@@ -605,6 +610,12 @@ void paramGet(uint16 param_type)
             packet_lenght = 4;
             break;
 
+        //-------------------------------------     Get Deflection control flag
+        case PARAM_DEFLECTION_CONTROL:
+            packet_data[1] = c_mem.deflection_control;
+            packet_lenght = 3;
+            break;
+
     }
 
     packet_data[packet_lenght - 1] = LCRChecksum(packet_data,packet_lenght - 1);
@@ -635,10 +646,19 @@ void infoPrepare(unsigned char *info_string)
     strcat(info_string,str);
     strcat(info_string,"\r\n");
 
+    strcat(info_string, "Deflection control: ");
+    if(c_mem.deflection_control)
+        strcat(info_string, "ACTIVE\r\n");
+    else
+        strcat(info_string, "NON ACTIVE\r\n");
+
     strcat(info_string, "MOTOR INFO\r\n");
     strcat(info_string, "Motor references: ");
     for (i = 0; i < NUM_OF_MOTORS; i++) {
-        sprintf(str, "%d ", (int)(g_ref.pos[i] >> c_mem.res[i]));
+        if(c_mem.deflection_control)
+            sprintf(str, "%d ", (int) ((g_ref.pos[i] + g_meas.pos[2]) >> c_mem.res[i]));
+        else
+            sprintf(str, "%d ", (int)(g_ref.pos[i] >> c_mem.res[i]));
         strcat(info_string,str);
     }
     strcat(info_string,"\r\n");
@@ -940,6 +960,7 @@ uint8 memInit(void) {
     g_mem.control_mode  =   0;
 
     g_mem.pos_lim_flag = 1;
+    g_mem.deflection_control = 0;
 
     for (i = 0; i < NUM_OF_MOTORS; i++) {
         g_mem.pos_lim_inf[i] = -30000;

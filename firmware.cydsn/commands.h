@@ -126,7 +126,8 @@ enum qbmove_parameter {
 
     PARAM_CURRENT_LIMIT          = 12,  ///< Limit for absorbed current
 
-    PARAM_PID_CURR_CONTROL       = 18
+    PARAM_PID_CURR_CONTROL       = 18,  ///< Current control PID
+    PARAM_DEFLECTION_CONTROL     = 22   ///< Deflection control flag
 
 };
 
