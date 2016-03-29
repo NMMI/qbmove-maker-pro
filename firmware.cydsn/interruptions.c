@@ -260,6 +260,19 @@ void motor_control(uint8 index) {
         }
     }
 
+    if (c_mem.max_step_pos != 0 && c_mem.max_step_neg != 0) {
+        if ((ref_input[index] - g_ref.pos[index]) > c_mem.max_step_pos)
+            g_ref.pos[index] += c_mem.max_step_pos;
+        else { 
+            if ((ref_input[index] - g_ref.pos[index]) < c_mem.max_step_neg)
+                g_ref.pos[index] += c_mem.max_step_neg;
+            else 
+                g_ref.pos[index] = ref_input[index];
+        }
+    }
+    else
+        ref_input[index] = g_ref.pos[index]; 
+
     switch(c_mem.control_mode) {
         case CONTROL_ANGLE:
             // position error

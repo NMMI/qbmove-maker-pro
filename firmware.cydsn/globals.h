@@ -29,7 +29,7 @@
 //                                                                        DEVICE
 //==============================================================================
 
-#define VERSION         "QBMMP v5.5.0"
+#define VERSION         "QBMMP v5.6.0"
 
 #define NUM_OF_MOTORS           2
 #define NUM_OF_SENSORS          3
@@ -136,9 +136,11 @@ struct st_mem {
 
     uint16  max_stiffness;              // Max stiffness value obtained
                                         // during calibration                       2       
-    uint8   deflection_control;         // Deflection control flag                  1       20
+    uint8   deflection_control;         // Deflection control flag                  1       
+    int32   max_step_neg;               // Maximum velocity for negative inputs     4       
+    int32   max_step_pos;               // Maximum velocity for positive inputs     4       28
 
-                                                                                        //  78
+                                                                                        //  86
 };
 
 //=================================================     device related variables
@@ -207,6 +209,7 @@ extern uint32 timer_value;
 extern uint8 calibration_flag;
 
 extern uint8 reset_last_value_flag;
+extern int32 ref_input[NUM_OF_MOTORS];
 
 // -----------------------------------------------------------------------------
 

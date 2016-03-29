@@ -74,18 +74,36 @@ void commProcess(void){
 //===========================================================     CMD_SET_INPUTS
 
         case CMD_SET_INPUTS:
-            g_ref.pos[0] = *((int16 *) &g_rx.buffer[1]);   // motor 1
-            g_ref.pos[0] = g_ref.pos[0] << c_mem.res[0];
+            if(c_mem.max_step_pos != 0 && c_mem.max_step_neg != 0) {
+                ref_input[0] = *((int16 *) &g_rx.buffer[1]);
+                ref_input[0] = ref_input[0] << c_mem.res[0];
 
-            g_ref.pos[1] = *((int16 *) &g_rx.buffer[3]);   // motor 2
-            g_ref.pos[1] = g_ref.pos[1] << c_mem.res[1];
+                ref_input[1] = *((int16 *) &g_rx.buffer[3]);
+                ref_input[1] = ref_input[1] << c_mem.res[1];
 
-            if (c_mem.pos_lim_flag) {                      // pos limiting
-                if (g_ref.pos[0] < c_mem.pos_lim_inf[0]) g_ref.pos[0] = c_mem.pos_lim_inf[0];
-                if (g_ref.pos[1] < c_mem.pos_lim_inf[1]) g_ref.pos[1] = c_mem.pos_lim_inf[1];
+                if (c_mem.pos_lim_flag) {                      // pos limiting
+                    if (ref_input[0] < c_mem.pos_lim_inf[0]) ref_input[0] = c_mem.pos_lim_inf[0];
+                    if (ref_input[1] < c_mem.pos_lim_inf[1]) ref_input[1] = c_mem.pos_lim_inf[1];
 
-                if (g_ref.pos[0] > c_mem.pos_lim_sup[0]) g_ref.pos[0] = c_mem.pos_lim_sup[0];
-                if (g_ref.pos[1] > c_mem.pos_lim_sup[1]) g_ref.pos[1] = c_mem.pos_lim_sup[1];
+                    if (ref_input[0] > c_mem.pos_lim_sup[0]) ref_input[0] = c_mem.pos_lim_sup[0];
+                    if (ref_input[1] > c_mem.pos_lim_sup[1]) ref_input[1] = c_mem.pos_lim_sup[1];
+                }
+            }
+            else {
+                ref_input[0] = ref_input[1] = 0;
+                g_ref.pos[0] = *((int16 *) &g_rx.buffer[1]);   // motor 1
+                g_ref.pos[0] = g_ref.pos[0] << c_mem.res[0];
+
+                g_ref.pos[1] = *((int16 *) &g_rx.buffer[3]);   // motor 2
+                g_ref.pos[1] = g_ref.pos[1] << c_mem.res[1];
+            
+                if (c_mem.pos_lim_flag) {                      // pos limiting
+                    if (g_ref.pos[0] < c_mem.pos_lim_inf[0]) g_ref.pos[0] = c_mem.pos_lim_inf[0];
+                    if (g_ref.pos[1] < c_mem.pos_lim_inf[1]) g_ref.pos[1] = c_mem.pos_lim_inf[1];
+
+                    if (g_ref.pos[0] > c_mem.pos_lim_sup[0]) g_ref.pos[0] = c_mem.pos_lim_sup[0];
+                    if (g_ref.pos[1] > c_mem.pos_lim_sup[1]) g_ref.pos[1] = c_mem.pos_lim_sup[1];
+                }
             }
             g_count.set_inputs++;
         break;
@@ -406,6 +424,7 @@ void infoGet(uint16 info_type){
 void paramSet(uint16 param_type)
 {
     uint8 i;
+    int aux_int;
 
     switch(param_type)
     {
@@ -498,6 +517,21 @@ void paramSet(uint16 param_type)
             g_mem.deflection_control = *((uint8 *) &g_rx.buffer[3]);
             break;
 
+        //------------------------------------------------     Set max step pos
+        case PARAM_MAX_STEP_POS:
+            aux_int = *((int32 *) &g_rx.buffer[3]);
+            if (aux_int >= 0) {
+                g_mem.max_step_pos = aux_int;
+            }
+            break;
+
+        //------------------------------------------------     Set max step neg
+        case PARAM_MAX_STEP_NEG:
+            aux_int = *((int32 *) &g_rx.buffer[3]);
+            if (aux_int <= 0) {
+                g_mem.max_step_neg = aux_int;
+            }
+            break;
     }
     sendAcknowledgment(ACK_OK);
 }
@@ -614,6 +648,18 @@ void paramGet(uint16 param_type)
         case PARAM_DEFLECTION_CONTROL:
             packet_data[1] = c_mem.deflection_control;
             packet_lenght = 3;
+            break;
+
+        //------------------------------------------------    Get max step pos
+        case PARAM_MAX_STEP_POS:
+            *((int32 *)(packet_data + 1)) = c_mem.max_step_pos;
+            packet_lenght = 6;
+            break;
+
+        //-------------------------------------------------   Get max step neg
+        case PARAM_MAX_STEP_NEG:
+            *((int32 *)(packet_data + 1)) = c_mem.max_step_neg;
+            packet_lenght = 6;
             break;
 
     }
@@ -774,6 +820,16 @@ void infoPrepare(unsigned char *info_string)
         strcat(info_string, str);
         strcat(info_string,"\r\n");
     }
+
+    strcat(info_string, "\nMaximum steps\r\n");
+    strcat(info_string, "Pos. step: ");
+    sprintf(str, "%d", (int) c_mem.max_step_pos);
+    strcat(info_string, str);
+    strcat(info_string, "\r\n");
+    strcat(info_string, "Neg. step: ");
+    sprintf(str, "%d", (int) c_mem.max_step_neg);
+    strcat(info_string, str);
+    strcat(info_string, "\r\n");
 
     sprintf(str, "Position limit active: %d", (int)c_mem.pos_lim_flag);
     strcat(info_string, str);
@@ -961,6 +1017,9 @@ uint8 memInit(void) {
 
     g_mem.pos_lim_flag = 1;
     g_mem.deflection_control = 0;
+
+    g_mem.max_step_neg = 0;
+    g_mem.max_step_pos = 0;
 
     for (i = 0; i < NUM_OF_MOTORS; i++) {
         g_mem.pos_lim_inf[i] = -30000;

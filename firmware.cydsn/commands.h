@@ -120,6 +120,8 @@ enum qbmove_parameter {
     PARAM_POS_LIMIT              = 8,   ///< Position limit values
                                         ///  | int32     | int32     | int32     | int32     |
                                         ///  | INF_LIM_1 | SUP_LIM_1 | INF_LIM_2 | SUP_LIM_2 |
+    PARAM_MAX_STEP_POS           = 9,   ///< Used to slow down movements for positive values
+    PARAM_MAX_STEP_NEG           = 10,  ///< Used to slow down movements for negative values
     PARAM_POS_RESOLUTION         = 11,  ///< Angle resolution for inputs and
                                         ///  measurements. Used during
                                         ///  communication.
