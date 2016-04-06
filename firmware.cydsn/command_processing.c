@@ -129,8 +129,14 @@ void commProcess(void){
             stiff = (int32)(((float)c_mem.max_stiffness / 32768.0) * stiff);
 
             // pos stiff rule
-            g_ref.pos[0] = pos + stiff;
-            g_ref.pos[1] = pos - stiff;
+            if(c_mem.max_step_pos != 0 && c_mem.max_step_neg != 0) {
+                ref_input[0] = pos + stiff;
+                ref_input[1] = pos - stiff;
+            }
+            else {
+                g_ref.pos[0] = pos + stiff;
+                g_ref.pos[1] = pos - stiff;
+            }
             g_count.set_pos_stiff++;
         break;
 
