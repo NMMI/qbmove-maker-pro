@@ -31,3 +31,4 @@ uint8 calibration_flag;
 
 uint8 reset_last_value_flag;
 int32 ref_input[NUM_OF_MOTORS];
+int8  pwm_sign[NUM_OF_MOTORS];

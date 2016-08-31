@@ -29,7 +29,7 @@
 //                                                                        DEVICE
 //==============================================================================
 
-#define VERSION         "QBMMP v5.6.1"
+#define VERSION         "QBMMP v5.6.2"
 
 #define NUM_OF_MOTORS           2
 #define NUM_OF_SENSORS          3
@@ -210,6 +210,7 @@ extern uint8 calibration_flag;
 
 extern uint8 reset_last_value_flag;
 extern int32 ref_input[NUM_OF_MOTORS];
+extern int8  pwm_sign[NUM_OF_MOTORS];
 
 // -----------------------------------------------------------------------------
 

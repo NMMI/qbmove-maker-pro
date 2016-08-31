@@ -244,6 +244,8 @@ void motor_control(uint8 index) {
     static int32 pos_error_sum[NUM_OF_MOTORS];
     static int32 curr_error_sum[NUM_OF_MOTORS];
 
+    static int32 prev_curr_err[NUM_OF_MOTORS];
+
     // check index value
     if (index >= NUM_OF_MOTORS)
         return;
@@ -357,6 +359,14 @@ void motor_control(uint8 index) {
             } 
 
             pos_error = g_ref.pos[index] - g_meas.pos[index];
+            pos_error_sum[index] += pos_error;
+
+            // error_sum saturation
+            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT) {
+                pos_error_sum[index] = POS_INTEGRAL_SAT_LIMIT;
+            } else if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT) {
+                pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
+            }
 
             // ------ position PID control -----
 
@@ -403,16 +413,25 @@ void motor_control(uint8 index) {
                     break;
             }
 
-            // current ref must be positive
-            curr_ref = abs(curr_ref);
-
             // saturate max current
             if (curr_ref > c_mem.current_limit) {
                 curr_ref = c_mem.current_limit;
             }
+            else {
+                if(curr_ref < -c_mem.current_limit)
+                   curr_ref = -c_mem.current_limit;
+            }
 
             // current error
             curr_error = curr_ref - g_meas.curr[index];
+
+            curr_error_sum[index] += curr_error;
+
+            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
+                curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
+            } else if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT) {
+                curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
+            }
 
             // ----- current PID control -----
 
@@ -433,30 +452,6 @@ void motor_control(uint8 index) {
                 pwm_input += (int32)(c_mem.k_d_c * (prev_curr[index] - g_meas.curr[index])) >> 16;
             }
 
-            // pwm_input saturation
-            if (pwm_input < 0) {
-                pwm_input = 0;
-            } else if (pwm_input > PWM_MAX_VALUE) {
-                pwm_input = PWM_MAX_VALUE;
-            }
-
-            // update error sum for both errors
-            pos_error_sum[index] += pos_error;
-            curr_error_sum[index] += curr_error;
-
-            // error_sum saturation
-            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT) {
-                pos_error_sum[index] = POS_INTEGRAL_SAT_LIMIT;
-            } else if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT) {
-                pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
-            }
-
-            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
-                curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
-            } else if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT) {
-                curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
-            }
-
             // Update position
             prev_pos[index] = g_meas.pos[index];
 
@@ -467,74 +462,77 @@ void motor_control(uint8 index) {
 
         case CONTROL_CURRENT:
 
-            // Current ref from pos ref
-            curr_ref = g_ref.pos[index] >> c_mem.res[index];
+            if(g_ref.onoff && device.tension_valid) {
+                // Current ref from pos ref
+                curr_ref = g_ref.pos[index] >> c_mem.res[index];
 
-            // saturate max current
-            if (curr_ref > c_mem.current_limit) {
-                curr_ref = c_mem.current_limit;
-            }
+                // saturate max current
+                if (curr_ref > c_mem.current_limit) {
+                    curr_ref = c_mem.current_limit;
+                }
+                else {
+                    if (curr_ref < -c_mem.current_limit)
+                        curr_ref = -c_mem.current_limit;
+                }
 
-            // Current error
-            curr_error = abs(curr_ref) - g_meas.curr[index];
 
-            // Error sum for integral
-            curr_error_sum[index] += curr_error;
+                // Current error
+                curr_error = (curr_ref) - g_meas.curr[index];
 
-            //anti wind-up
-            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
-                curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
-            } else if (curr_error_sum[index] < 0) {
-                curr_error_sum[index] = 0;
-            }
+                // Error sum for integral
+                curr_error_sum[index] += curr_error;
 
-            // pwm_input init
-            pwm_input = 0;
+                //anti wind-up
+                if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
+                    curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
+                } else if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT) {
+                    curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
+                }
 
-            // Proportional
-            if (c_mem.k_p_c != 0) {
-                pwm_input += (int32)(c_mem.k_p_c * curr_error) >> 16;
-            }
-
-            // Integral
-            if (c_mem.k_i_c != 0) {
-                pwm_input += (int32)(c_mem.k_i_c * (curr_error_sum[index] >> 6)) >> 10;
-            }
-
-            // Derivative
-            if (c_mem.k_d_c != 0) {
-                pwm_input += (int32)(c_mem.k_d_c * (prev_curr[index] - g_meas.curr[index])) >> 16;
-            }
-
-            // Saturate pwm_input
-            if (pwm_input < 0)
+                // pwm_input init
                 pwm_input = 0;
 
-            // Update measure
-            prev_curr[index] = g_meas.curr[index];
+                // Proportional
+                if (c_mem.k_p_c != 0) {
+                    pwm_input += (int32)(c_mem.k_p_c * curr_error) >> 16;
+                }
 
-            switch(index) {
-                case 0:
-                    if (curr_ref >= 0) {
-                        direction = direction | 0x01;
-                    } else {
-                        direction = direction & 0xFE;
-                    }
-                    break;
+                // Integral
+                if (c_mem.k_i_c != 0) {
+                    pwm_input += (int32)(c_mem.k_i_c * (curr_error_sum[index] >> 6)) >> 10;
+                }
 
-                case 1:
-                    if (curr_ref >= 0) {
-                        direction = direction | 0x02;
-                    } else {
-                        direction = direction & 0xFD;
-                    }
-                    break;
+                // Derivative
+                if (c_mem.k_d_c != 0) {
+                    pwm_input += (int32)(c_mem.k_d_c * (curr_error - prev_curr_err[index])) >> 16;
+                }
 
-                default:
-                    break;
+                // Update measure
+                prev_curr_err[index] = g_meas.curr[index];
+
+                switch(index) {
+                    case 0:
+                        if (curr_ref >= 0) {
+                            direction = direction | 0x01;
+                        } else {
+                            direction = direction & 0xFE;
+                        }
+                        break;
+
+                    case 1:
+                        if (curr_ref >= 0) {
+                            direction = direction | 0x02;
+                        } else {
+                            direction = direction & 0xFD;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+
+                break;
             }
-
-            break;
 
         case CONTROL_PWM:
             // Direct PWM value
@@ -581,10 +579,12 @@ void motor_control(uint8 index) {
     switch(index) {
         case 0:
             PWM_MOTORS_WriteCompare1(abs(pwm_input));
+            pwm_sign[0] = SIGN(pwm_input);
             break;
 
         case 1:
             PWM_MOTORS_WriteCompare2(abs(pwm_input));
+            pwm_sign[1] = SIGN(pwm_input);
             break;
 
         default:
@@ -638,7 +638,7 @@ void analog_read_end(uint8 index) {
             // --- Current motor 1 ---
             case 1:
                 if (device.tension_valid) {
-                    g_meas.curr[0] =  filter_i1(abs((value * 39) >> 4));
+                    g_meas.curr[0] = filter_i1(((value * 25771) >> 13) * pwm_sign[0]);
                 } else {
                     g_meas.curr[0] = 0;
                 }
@@ -647,7 +647,7 @@ void analog_read_end(uint8 index) {
             // --- Current motor 2 ---
             case 2:
                 if (device.tension_valid) {
-                    g_meas.curr[1] =  filter_i2(abs((value * 39) >> 4));
+                    g_meas.curr[1] = filter_i2(((value * 25771) >> 13) * pwm_sign[1]);
                 } else {
                     g_meas.curr[1] = 0;
                 }
