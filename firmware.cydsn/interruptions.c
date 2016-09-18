@@ -7,7 +7,7 @@
 * \file         interruptions.c
 *
 * \brief        Interruption functions are in this file.
-* \date         Feb 06, 2012
+* \date         Dic. 1, 2015
 * \author       qbrobotics
 * \copyright    (C)  qbrobotics. All rights reserved.
 */
@@ -22,160 +22,204 @@
 
 //===================================================================     global
 
-uint8 timer_flag = 0;
 
 // PWM vaules needed to obtain 8 Volts given a certain input tension
 // Numbers are sperimentally calculated //[index] (milliampere)
-static const uint8 hitech_pwm_preload_values[36] = {100,   //0 (8000)
-                                                     76,
-                                                     71,
-                                                     69,
-                                                     67,
-                                                     65,     //5 (10500)
-                                                     63,
-                                                     61,
-                                                     60,
-                                                     58,
-                                                     57,     //10 (13000)
-                                                     56,
-                                                     55,
-                                                     54,
-                                                     53,
-                                                     52,     //15 (15500)
-                                                     51,
-                                                     50,
-                                                     49,
-                                                     49,
-                                                     48,     //20 (18000)
-                                                     47,
-                                                     47,
-                                                     46,
-                                                     45,
-                                                     45,     //25 (20500)
-                                                     45,
-                                                     44,
-                                                     44,
-                                                     43,
-                                                     43,     //30 (23000)
-                                                     43,
-                                                     43,
-                                                     42,
-                                                     42,
-                                                     42};    //35 (25500)
+CYCODE uint8 hitech_pwm_preload_values[36] = {  100,   //0 (8000)
+                                                76,
+                                                71,
+                                                69,
+                                                67,
+                                                65,     //5 (10500)
+                                                63,
+                                                61,
+                                                60,
+                                                58,
+                                                57,     //10 (13000)
+                                                56,
+                                                55,
+                                                54,
+                                                53,
+                                                52,     //15 (15500)
+                                                51,
+                                                50,
+                                                49,
+                                                49,
+                                                48,     //20 (18000)
+                                                47,
+                                                47,
+                                                46,
+                                                45,
+                                                45,     //25 (20500)
+                                                45,
+                                                44,
+                                                44,
+                                                43,
+                                                43,     //30 (23000)
+                                                43,
+                                                43,
+                                                42,
+                                                42,
+                                                42};    //35 (25500)
+
+
+//==============================================================================
+//                                                            WATCHDOG INTERRUPT
+//==============================================================================
+
+CY_ISR(ISR_WATCHDOG_Handler){
+
+    // Set WDT flag
+    
+    watchdog_flag = TRUE;
+
+}
 
 //==============================================================================
 //                                                            RS485 RX INTERRUPT
 //==============================================================================
-// Processing RS-485 data frame:
-//
-// - 0:     Waits for beginning characters
-// - 1:     Waits for ID;
-// - 2:     Data length;
-// - 3:     Receive all bytes;
-// - 4:     Wait for another device end of transmission;
-//
-//==============================================================================
 
 CY_ISR(ISR_RS485_RX_ExInterrupt) {
 
+    // Set RS485 flag
+    
+    interrupt_flag = TRUE;
+     
+}
+
+//==============================================================================
+//                                                             INTERRUPT MANAGER
+//==============================================================================
+// Manage interrupt from RS485 
+//==============================================================================
+// Processing RS-485 data frame:
+//
+// - WAIT_START:    Waits for beginning characters;
+// - WAIT_ID:       Waits for ID;
+// - WAIT_LENGTH:   Data length;
+// - RECEIVE:       Receive all bytes;
+// - UNLOAD:        Wait for another device end of transmission;
+//
+//==============================================================================
+
+void interrupt_manager(){
+
+    
     //===========================================     local variables definition
 
-    static uint8    state = 0;                          // state
-    static struct   st_data data_packet;                // local data packet
-    static uint8    rx_queue[3];                        // last 3 bytes received
+    static uint8 CYDATA state = WAIT_START;                      // state
+    
+    //------------------------------------------------- local data packet
+    static uint8 CYDATA data_packet_index;
+    static uint8 CYDATA data_packet_length;
+    static uint8 data_packet_buffer[128];                     
+    static uint8 CYDATA rx_queue[3];                    // last 2 bytes received
+    //-------------------------------------------------
 
-    static uint8    rx_data;                            // RS485 UART rx data
-    static uint8    rx_data_type;                       // my id?
+    uint8 CYDATA    rx_data;                            // RS485 UART rx data
+    CYBIT           rx_data_type;                       // my id?
+    uint8 CYDATA    package_count = 0;                     
 
     //======================================================     receive routine
-
-    // get data while rx fifo is not empty
-    while (UART_RS485_ReadRxStatus() & UART_RS485_RX_STS_FIFO_NOTEMPTY) {
+    
+    // Get data until buffer is not empty 
+    
+    while(UART_RS485_GetRxBufferSize() && (package_count < 6)){  
+        // 6 stima di numero massimo di pacchetti che riesco a leggere senza bloccare l'esecuzione del firmware
+        
+        // Get next char
         rx_data = UART_RS485_GetChar();
+        
         switch (state) {
             //-----     wait for frame start     -------------------------------
-            case 0:
-
+            case WAIT_START:
+            
                 rx_queue[0] = rx_queue[1];
                 rx_queue[1] = rx_queue[2];
                 rx_queue[2] = rx_data;
-
-                if ((rx_queue[1] == ':') && (rx_queue[2] == ':')) {
+                
+                // Check for header configuration package
+                if ((rx_queue[1] == 58) && (rx_queue[2] == 58)) {
                     rx_queue[0] = 0;
                     rx_queue[1] = 0;
                     rx_queue[2] = 0;
-                    state       = 1;
-                } else if (
-                (rx_queue[0] == 63) &&      //ASCII - ?
-                (rx_queue[1] == 13) &&      //ASCII - CR
-                (rx_queue[2] == 10)) {      //ASCII - LF
-                    infoGet(INFO_ALL);
-                }
+                    state       = WAIT_ID;                    
+                }else
+                    if ((rx_queue[0] == 63) &&      //ASCII - ?
+                        (rx_queue[1] == 13) &&      //ASCII - CR
+                        (rx_queue[2] == 10))        //ASCII - LF)
+                        infoGet(INFO_ALL);
                 break;
 
             //-----     wait for id     ----------------------------------------
-            case  1:
+            case  WAIT_ID:
 
                 // packet is for my ID or is broadcast
-                if (rx_data == c_mem.id || rx_data == 0) {
-                    rx_data_type = 0;
-                } else {                //packet is for others
-                    rx_data_type = 1;
-                }
-                data_packet.length = -1;
-                state = 2;
+                if (rx_data == c_mem.id || rx_data == 0)
+                    rx_data_type = FALSE;
+                else                //packet is for others
+                    rx_data_type = TRUE;
+                
+                data_packet_length = 0;
+                state = WAIT_LENGTH;
                 break;
 
             //-----     wait for length     ------------------------------------
-            case  2:
+            case  WAIT_LENGTH:
 
-                data_packet.length = rx_data;
+ 
+                data_packet_length = rx_data;
                 // check validity of pack length
-                if (data_packet.length <= 1) {
-                    data_packet.length = -1;
-                    state = 0;
-                } else if (data_packet.length > 128) {
-                    data_packet.length = -1;
-                    state = 0;
+                if (data_packet_length <= 1) {
+                    data_packet_length = 0;
+                    state = WAIT_START;
+                } else if (data_packet_length > 128) {
+                    data_packet_length = 0;
+                    state = WAIT_START;
                 } else {
-                    data_packet.ind = 0;
-                    if(rx_data_type == 0) {
-                        state = 3;          // packet for me or broadcast
-                    } else {
-                        state = 4;          // packet for others
-                    }
+                    data_packet_index = 0;
+                    
+                    if(rx_data_type == FALSE)
+                        state = RECEIVE;          // packet for me or broadcast
+                    else
+                        state = UNLOAD;           // packet for others
                 }
                 break;
 
-            //-----     receving     -------------------------------------------
-            case 3:
+            //-----     receiving     -------------------------------------------
+            case RECEIVE:
 
-                data_packet.buffer[data_packet.ind] = rx_data;
-                data_packet.ind++;
+                data_packet_buffer[data_packet_index] = rx_data;
+                data_packet_index++;
+                
                 // check end of transmission
-                if (data_packet.ind >= data_packet.length) {
+                if (data_packet_index >= data_packet_length) {
                     // verify if frame ID corresponded to the device ID
-                    if (rx_data_type == 0) {
+                    if (rx_data_type == FALSE) {
                         // copying data from buffer to global packet
-                        memcpy(g_rx.buffer, data_packet.buffer, data_packet.length);
-                        g_rx.length = data_packet.length;
+                        memcpy(g_rx.buffer, data_packet_buffer, data_packet_length);
+                        g_rx.length = data_packet_length;
                         g_rx.ready  = 1;
                         commProcess();
                     }
-                    data_packet.ind    = 0;
-                    data_packet.length = -1;
-                    state              = 0;
+                    
+                    data_packet_index  = 0;
+                    data_packet_length = 0;
+                    state              = WAIT_START;
+                    package_count++;
+                
                 }
                 break;
 
             //-----     other device is receving     ---------------------------
-            case 4:
-                if (!(--data_packet.length)) {
-                    data_packet.ind    = 0;
-                    data_packet.length = -1;
+            case UNLOAD:
+                if (!(--data_packet_length)) {
+                    data_packet_index  = 0;
+                    data_packet_length = 0;
                     RS485_CTS_Write(1);
                     RS485_CTS_Write(0);
-                    state              = 0;
+                    state              = WAIT_START;
+                    package_count++;
                 }
                 break;
         }
@@ -187,40 +231,115 @@ CY_ISR(ISR_RS485_RX_ExInterrupt) {
 //==============================================================================
 // Call all the function with the right frequency
 //==============================================================================
+// Base frequency 1000 Hz
+//==============================================================================
 
 void function_scheduler(void) {
-    // Base frequency 1000 Hz
-
+ 
     static uint16 counter_calibration = DIV_INIT_VALUE;
+    
+    // Start ADC Conversion, SOC = 1
 
-    // Optimized manual scheduling
-    analog_read_init(0);
-    encoder_reading(0);
+    timer_value0 = (uint32)MY_TIMER_ReadCounter();
+    
+    ADC_SOC_Write(0x01); 
+    
+    // Check Interrupt 
+
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+  
+    //---------------------------------- Get Encoders
+
+    encoder_reading(0); 
+    
+    // Check Interrupt     
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }   
+    
     encoder_reading(1);
-    analog_read_end(0);
-
-    analog_read_init(1);
+    
+    // Check Interrupt 
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+    
     encoder_reading(2);
+    
+    // Check Interrupt 
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+
+    //---------------------------------- Control Motors
+    
     motor_control(0);
-    analog_read_end(1);
 
-    analog_read_init(2);
+    // Check Interrupt 
+
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+    
     motor_control(1);
-    analog_read_end(2);
+    
+    // Check Interrupt 
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
 
+    //---------------------------------- Read conversion buffer - LOCK function
+
+    analog_read_end();
+
+    //---------------------------------- Calibration 
 
     // Divider 100, freq = 10 Hz
-    if (calibration_flag != STOP) {
+    if (!(calibration_flag == STOP)) {
         if (counter_calibration == CALIBRATION_DIV) {
             calibration();
             counter_calibration = 0;
         }
         counter_calibration++;
     }
+    // Check Interrupt 
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+   
+    //---------------------------------- Update States
+    
+    // Load k-1 state
+    memcpy( &g_measOld, &g_meas, sizeof(g_meas) );
+    memcpy( &g_refOld, &g_ref, sizeof(g_ref) );
 
+    // Load k+1 state
+    memcpy( &g_ref, &g_refNew, sizeof(g_ref) );
+
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+
+    //CyDelayUs(100);
 
     timer_value = (uint32)MY_TIMER_ReadCounter();
     MY_TIMER_WriteCounter(5000000);
+
 }
 
 
@@ -228,209 +347,225 @@ void function_scheduler(void) {
 //                                                                MOTORS CONTROL
 //==============================================================================
 
-void motor_control(uint8 index) {
-    static int32 curr_ref;
+void motor_control(const uint8 idx) {
+    
+    uint8 CYDATA index = idx;
+ 
+    int32 CYDATA curr_ref;
 
-    static int32 pwm_input;
-    static int32 pos_error;
-    static int32 curr_error;
-    static int32 defl_input[NUM_OF_MOTORS];
+    int32 CYDATA pwm_input = 0;
+    
+    int32 CYDATA pos_error;
+    int32 CYDATA curr_error;
+    int32 CYDATA defl_input[NUM_OF_MOTORS];
+    
+    int32 CYDATA k_p = c_mem.k_p;  
+    int32 CYDATA k_i = c_mem.k_i; 
+    int32 CYDATA k_d = c_mem.k_d; 
 
-    static uint8 direction;
+    int32 CYDATA k_p_c = c_mem.k_p_c;  
+    int32 CYDATA k_i_c = c_mem.k_i_c; 
+    int32 CYDATA k_d_c = c_mem.k_d_c;   
 
-    static int32 prev_pos[NUM_OF_MOTORS];
-    static int32 prev_curr[NUM_OF_MOTORS];
+    int32 CYDATA k_p_dl = c_mem.k_p_dl;  
+    int32 CYDATA k_i_dl = c_mem.k_i_dl; 
+    int32 CYDATA k_d_dl = c_mem.k_d_dl; 
 
+    int32 CYDATA k_p_c_dl = c_mem.k_p_c_dl;  
+    int32 CYDATA k_i_c_dl = c_mem.k_i_c_dl; 
+    int32 CYDATA k_d_c_dl = c_mem.k_d_c_dl;  
+
+    // Static Variables
+    
+    static CYBIT dirM0, dirM1;
+    
     static int32 pos_error_sum[NUM_OF_MOTORS];
     static int32 curr_error_sum[NUM_OF_MOTORS];
-
     static int32 prev_curr_err[NUM_OF_MOTORS];
 
     // check index value
     if (index >= NUM_OF_MOTORS)
         return;
-
     // --------------- USE THIRD ENCODER AS INPUT FOR BOTH MOTORS --------------
     if (c_mem.input_mode == INPUT_MODE_ENCODER3) {
 
-        g_ref.pos[index] = g_meas.pos[2];
+        g_ref.pos[index] = g_measOld.pos[2];
 
         // position limit
         if (c_mem.pos_lim_flag) {
-            if (g_ref.pos[index] < c_mem.pos_lim_inf[index]) g_ref.pos[index] = c_mem.pos_lim_inf[index];
-            if (g_ref.pos[index] > c_mem.pos_lim_sup[index]) g_ref.pos[index] = c_mem.pos_lim_sup[index];
+            if (g_ref.pos[index] < c_mem.pos_lim_inf[index]) 
+                g_ref.pos[index] = c_mem.pos_lim_inf[index];
+            if (g_ref.pos[index] > c_mem.pos_lim_sup[index]) 
+                g_ref.pos[index] = c_mem.pos_lim_sup[index];
         }
     }
-
-    if (c_mem.max_step_pos != 0 && c_mem.max_step_neg != 0) {
-        if ((ref_input[index] - g_ref.pos[index]) > c_mem.max_step_pos)
-            g_ref.pos[index] += c_mem.max_step_pos;
-        else { 
-            if ((ref_input[index] - g_ref.pos[index]) < c_mem.max_step_neg)
-                g_ref.pos[index] += c_mem.max_step_neg;
-            else 
-                g_ref.pos[index] = ref_input[index];
-        }
-    }
-    else
-        ref_input[index] = g_ref.pos[index]; 
 
     switch(c_mem.control_mode) {
         case CONTROL_ANGLE:
-            // position error
-
-            if(g_mem.deflection_control) {
-                defl_input[index] = g_ref.pos[index] + g_meas.pos[2];
-
+        case DEFLECTION_CONTROL:
+        
+            if(c_mem.control_mode == DEFLECTION_CONTROL){
+				//for deflection control the shaft position must be summed to reference
+                defl_input[index] = (g_ref.pos[index] + g_meas.pos[2]);
                 pos_error = defl_input[index] - g_meas.pos[index];
-                pos_error_sum[index] += pos_error;
             }
-            else { 
+            else 
+                // position error
                 pos_error = g_ref.pos[index] - g_meas.pos[index];
-                pos_error_sum[index] += pos_error;
+           
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
+            
+            // error sum for integral
+            pos_error_sum[index] += pos_error;
 
             //anti wind-up
-            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT) {
+            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT)
                 pos_error_sum[index] = POS_INTEGRAL_SAT_LIMIT;
-            } else if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT) {
-                pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
+            else{
+                if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT)
+                    pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
             }
-
+              
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
             // pwm_input init
             pwm_input = 0;
-
             // Proportional
-            if (c_mem.k_p != 0) {
-                if ((pos_error > 131072) || (pos_error < -131072)) {  //if grater than 2^17
-                    pwm_input += (int32)(c_mem.k_p * (pos_error >> 8)) >> 8;
-                } else {
-                    pwm_input += (int32)(c_mem.k_p * pos_error) >> 16;
-                }
+            if (k_p != 0) {
+                    
+                if ((pos_error > 131072) || (pos_error < -131072))  //if grater than 2^17
+                    pwm_input = (int32)(k_p * (pos_error >> 8)) >> 8;
+                else
+                    pwm_input = (int32)(k_p * pos_error) >> 16;
             }
-
+            
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
+                      
             // Integral
-            if (c_mem.k_i != 0) {
-                pwm_input += (int32)((c_mem.k_i >> 6) * pos_error_sum[index]) >> 10;
-            }
-
+            if (k_i != 0) 
+                pwm_input += (int32)((k_i >> 6) * pos_error_sum[index]) >> 10;
+            
             // Derivative
-            if (c_mem.k_d != 0) {
-                pwm_input += (int32)(c_mem.k_d * (prev_pos[index] - g_meas.pos[index])) >> 16;
+            if (k_d != 0)
+                pwm_input += (int32)(k_d * (g_measOld.pos[index] - g_meas.pos[index])) >> 16;
+         
+    
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
-
+             
             // Update measure
-            prev_pos[index] = g_meas.pos[index];
+            //prev_pos[index] = g_meas.pos[index];
 
-            switch(index) {
-                case 0:
-                    if (pwm_input >= 0) {
-                        direction = direction | 0x01;
-                    } else {
-                        direction = direction & 0xFE;
-                    }
-                    break;
-
-                case 1:
-                    if (pwm_input >= 0) {
-                        direction = direction | 0x02;
-                    } else {
-                        direction = direction & 0xFD;
-                    }
-                    break;
-
-                default:
-                    break;
+            if (index == 0){
+                if (pwm_input >= 0)
+                    dirM0 = 1;
+                    //direction |= 0x01;
+                else
+                    dirM0 = 0;
+                    //direction &= 0xFE;
+            }else{ // index == 1
+                if (pwm_input >= 0)
+                    dirM1 = 1;
+                   // direction |= 0x02;
+                else
+                    dirM1 = 0;
+                    //direction &= 0xFD;
             }
-
+            
             break;
 
         case CURR_AND_POS_CONTROL:
+        case DEFL_CURRENT_CONTROL:
 
-            if(g_mem.deflection_control) {
-                defl_input[index] = g_ref.pos[index] + g_meas.pos[2];
-
+            if(c_mem.control_mode == DEFL_CURRENT_CONTROL){
+                //for deflection control the shaft position must be summed to reference
+                defl_input[index] = (g_ref.pos[index] + g_meas.pos[2]);
                 pos_error = defl_input[index] - g_meas.pos[index];
-                pos_error_sum[index] += pos_error;
             }
-            else { 
+            else 
                 pos_error = g_ref.pos[index] - g_meas.pos[index];
-                pos_error_sum[index] += pos_error;
-            } 
 
-            pos_error = g_ref.pos[index] - g_meas.pos[index];
             pos_error_sum[index] += pos_error;
 
-            // error_sum saturation
-            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT) {
-                pos_error_sum[index] = POS_INTEGRAL_SAT_LIMIT;
-            } else if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT) {
-                pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
 
+            // error_sum saturation
+            if (pos_error_sum[index] > POS_INTEGRAL_SAT_LIMIT)
+                pos_error_sum[index] = POS_INTEGRAL_SAT_LIMIT;
+            else{
+                if (pos_error_sum[index] < -POS_INTEGRAL_SAT_LIMIT)
+                    pos_error_sum[index] = -POS_INTEGRAL_SAT_LIMIT;
+            }
             // ------ position PID control -----
 
             curr_ref = 0;
 
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
+
             // Proportional
-            if (c_mem.k_p != 0) {
-                if ((pos_error > 131072) || (pos_error < -131072)) {
-                    curr_ref += (int32)(c_mem.k_p * (pos_error >> 8)) >> 8;
-                } else {
-                    curr_ref += (int32)(c_mem.k_p * pos_error) >> 16;
-                }
+            if (k_p_dl != 0) {
+                if ((pos_error > 131072) || (pos_error < -131072))
+                    curr_ref += (int32)(k_p_dl * (pos_error >> 8)) >> 8;
+                else
+                    curr_ref += (int32)(k_p_dl * pos_error) >> 16;
             }
 
             // Integral
-            if (c_mem.k_i != 0) {
-                curr_ref += (int32)(c_mem.k_i * pos_error_sum[index]) >> 16;
-            }
-
+            if (k_i_dl != 0)
+                curr_ref += (int32)(k_i_dl * pos_error_sum[index]) >> 16;
+            
             // Derivative
-            if (c_mem.k_d != 0) {
-                curr_ref += (int32)(c_mem.k_d * (prev_pos[index] - g_meas.pos[index])) >> 16;
-            }
-
-            // motor direction depends on curr_ref
-            switch(index) {
-                case 0:
-                    if (curr_ref >= 0) {
-                        direction = direction | 0x01;
-                    } else {
-                        direction = direction & 0xFE;
-                    }
-                    break;
-
-                case 1:
-                    if (curr_ref >= 0) {
-                        direction = direction | 0x02;
-                    } else {
-                        direction = direction & 0xFD;
-                    }
-                    break;
-
-                default:
-                    break;
+            if (k_d_dl != 0)
+                curr_ref += (int32)(k_d_dl * (g_measOld.pos[index] - g_meas.pos[index])) >> 16;
+                        
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
 
             // saturate max current
-            if (curr_ref > c_mem.current_limit) {
+            if (curr_ref > c_mem.current_limit)
                 curr_ref = c_mem.current_limit;
-            }
             else {
-                if(curr_ref < -c_mem.current_limit)
-                   curr_ref = -c_mem.current_limit;
+                if (curr_ref < -c_mem.current_limit)
+                    curr_ref = -c_mem.current_limit;
             }
 
-            // current error
-            curr_error = curr_ref - g_meas.curr[index];
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
 
+            // current error and error sum
+            curr_error = curr_ref - g_meas.curr[index];
             curr_error_sum[index] += curr_error;
 
-            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
+            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT)
                 curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
-            } else if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT) {
-                curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
+            else{
+                if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT)
+                    curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
+            }
+
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
 
             // ----- current PID control -----
@@ -438,125 +573,135 @@ void motor_control(uint8 index) {
             pwm_input = 0;
 
             // Proportional
-            if (c_mem.k_p_c != 0) {
-                pwm_input += (int32)(c_mem.k_p_c * curr_error) >> 16;
-            }
-
+            if (k_p_c_dl != 0)
+                pwm_input += (int32)(k_p_c_dl * curr_error) >> 16;
+            
             // Integral
-            if (c_mem.k_i_c != 0) {
-                pwm_input += (int32)(c_mem.k_i_c * curr_error_sum[index]) >> 16;
-            }
-
+            if (k_i_c_dl != 0)
+                pwm_input += (int32)(k_i_c_dl * curr_error_sum[index]) >> 16;
+            
             // Derivative
-            if (c_mem.k_d_c != 0) {
-                pwm_input += (int32)(c_mem.k_d_c * (prev_curr[index] - g_meas.curr[index])) >> 16;
+            if (k_d_c_dl != 0)
+                pwm_input += (int32)(k_d_c_dl * (g_measOld.curr[index] - g_meas.curr[index])) >> 16;
+
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
             }
 
-            // Update position
-            prev_pos[index] = g_meas.pos[index];
-
-            // Update current
-            prev_curr[index] = g_meas.curr[index];
+            if (index == 0){
+                if (pwm_input >= 0)
+                    dirM0 = 1;
+                    //direction |= 0x01;
+                else
+                    dirM0 = 0;
+                    //direction &= 0xFE;
+            }else{ // index == 1
+                if (pwm_input >= 0)
+                    dirM1 = 1;
+                   // direction |= 0x02;
+                else
+                    dirM1 = 0;
+                    //direction &= 0xFD;
+            }
 
             break;
 
         case CONTROL_CURRENT:
 
-            if(g_ref.onoff && device.tension_valid) {
-                // Current ref from pos ref
-                curr_ref = g_ref.pos[index] >> c_mem.res[index];
+            // Current ref from pos ref
+            curr_ref = g_ref.pos[index] >> g_mem.res[index];
 
-                // saturate max current
-                if (curr_ref > c_mem.current_limit) {
-                    curr_ref = c_mem.current_limit;
-                }
-                else {
-                    if (curr_ref < -c_mem.current_limit)
-                        curr_ref = -c_mem.current_limit;
-                }
-
-
-                // Current error
-                curr_error = (curr_ref) - g_meas.curr[index];
-
-                // Error sum for integral
-                curr_error_sum[index] += curr_error;
-
-                //anti wind-up
-                if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT) {
-                    curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
-                } else if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT) {
-                    curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
-                }
-
-                // pwm_input init
-                pwm_input = 0;
-
-                // Proportional
-                if (c_mem.k_p_c != 0) {
-                    pwm_input += (int32)(c_mem.k_p_c * curr_error) >> 16;
-                }
-
-                // Integral
-                if (c_mem.k_i_c != 0) {
-                    pwm_input += (int32)(c_mem.k_i_c * (curr_error_sum[index] >> 6)) >> 10;
-                }
-
-                // Derivative
-                if (c_mem.k_d_c != 0) {
-                    pwm_input += (int32)(c_mem.k_d_c * (curr_error - prev_curr_err[index])) >> 16;
-                }
-
-                // Update measure
-                prev_curr_err[index] = g_meas.curr[index];
-
-                switch(index) {
-                    case 0:
-                        if (curr_ref >= 0) {
-                            direction = direction | 0x01;
-                        } else {
-                            direction = direction & 0xFE;
-                        }
-                        break;
-
-                    case 1:
-                        if (curr_ref >= 0) {
-                            direction = direction | 0x02;
-                        } else {
-                            direction = direction & 0xFD;
-                        }
-                        break;
-
-                    default:
-                        break;
-                }
-
-                break;
+            // saturate max current
+            if (curr_ref > c_mem.current_limit)
+                curr_ref = c_mem.current_limit;
+            else {
+                if(curr_ref < -c_mem.current_limit)
+                   curr_ref = -c_mem.current_limit;
             }
+            // Current error
+            curr_error = curr_ref - g_meas.curr[index];
+
+            // Error sum for integral
+            curr_error_sum[index] += curr_error;
+
+            //anti wind-up
+            if (curr_error_sum[index] > CURR_INTEGRAL_SAT_LIMIT)
+                curr_error_sum[index] = CURR_INTEGRAL_SAT_LIMIT;
+            else {
+                if (curr_error_sum[index] < -CURR_INTEGRAL_SAT_LIMIT)
+                    curr_error_sum[index] = -CURR_INTEGRAL_SAT_LIMIT;
+            }
+
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
+
+            // pwm_input init
+            pwm_input = 0;
+
+            // Proportional
+            if (k_p_c != 0)
+                pwm_input += (int32)(k_p * curr_error) >> 16;
+
+            // Integral
+            if (k_i_c != 0)
+                pwm_input += (int32)(k_i_c * (curr_error_sum[index] >> 6)) >> 10;
+            
+            // Derivative
+            if (k_d_c != 0)
+                pwm_input += (int32)(k_d_c * (curr_error - prev_curr_err[index])) >> 16;
+
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
+
+            // Update measure
+            prev_curr_err[index] = curr_error;
+            
+            if (index == 0){
+                if (pwm_input >= 0)
+                    dirM0 = 1;
+                    //direction |= 0x01;
+                else
+                    dirM0 = 0;
+                    //direction &= 0xFE;
+            }else{ // index == 1
+                if (pwm_input >= 0)
+                    dirM1 = 1;
+                   // direction |= 0x02;
+                else
+                    dirM1 = 0;
+                    //direction &= 0xFD;
+            }
+
+            if (interrupt_flag){
+                interrupt_flag = FALSE;
+                interrupt_manager();
+            }
+            
+            break;
 
         case CONTROL_PWM:
             // Direct PWM value
-            pwm_input = g_ref.pos[index] >> c_mem.res[index];
+            pwm_input = g_ref.pos[index] >> g_mem.res[index];
 
-            switch(index) {
-                case 0:
-                    if (pwm_input >= 0) {
-                        direction = direction | 0x01;
-                    } else {
-                        direction = direction & 0xFE;
-                    }
-                    break;
-
-                case 1:
-                    if (pwm_input >= 0) {
-                        direction = direction | 0x02;
-                    } else {
-                        direction = direction & 0xFD;
-                    }
-                    break;
-
-                default:
-                    break;
+            if (index == 0){
+                if (pwm_input >= 0)
+                    dirM0 = 1;
+                    //direction |= 0x01;
+                else
+                    dirM0 = 0;
+                    //direction &= 0xFE;
+            }else{ // index == 1
+                if (pwm_input >= 0)
+                    dirM1 = 1;
+                   // direction |= 0x02;
+                else
+                    dirM1 = 0;
+                    //direction &= 0xFD;
             }
 
             break;
@@ -564,31 +709,59 @@ void motor_control(uint8 index) {
         default:
             break;
     }
-
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+        
     // abs(pwm_input) must be lower or equal to PWM_MAX_VALUE
-    if(pwm_input >  PWM_MAX_VALUE) pwm_input =  PWM_MAX_VALUE;
-    if(pwm_input < -PWM_MAX_VALUE) pwm_input = -PWM_MAX_VALUE;
+    if(pwm_input >  PWM_MAX_VALUE) 
+        pwm_input =  PWM_MAX_VALUE;
+    if(pwm_input < -PWM_MAX_VALUE) 
+        pwm_input = -PWM_MAX_VALUE;
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }   
 
     // remap pwm_input on pwm_limit based on input tension to have maximum 8 volts
-    if (c_mem.control_mode != CONTROL_PWM) {
-        pwm_input = (((pwm_input << 10) / PWM_MAX_VALUE) * device.pwm_limit) >> 10;
+    if (c_mem.control_mode != CONTROL_PWM)
+        pwm_input = (((pwm_input << 10) / PWM_MAX_VALUE) * dev_pwm_limit) >> 10;
+
+    // drive direction and pwm duty cycle
+        
+    if (dirM0){
+        if (dirM1)
+            MOTOR_DIR_Write(0x03);
+        else
+            MOTOR_DIR_Write(0x01);
+    }
+    else{
+        if (dirM1)
+            MOTOR_DIR_Write(0x02);
+        else
+            MOTOR_DIR_Write(0x00);
     }
 
-    // drive direction and pwm duty cylce
-    MOTOR_DIR_Write(direction);
-    switch(index) {
-        case 0:
-            PWM_MOTORS_WriteCompare1(abs(pwm_input));
-            pwm_sign[0] = SIGN(pwm_input);
-            break;
-
-        case 1:
-            PWM_MOTORS_WriteCompare2(abs(pwm_input));
-            pwm_sign[1] = SIGN(pwm_input);
-            break;
-
-        default:
-            break;
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+    
+    if (index == 0) {
+        pwm_sign[0] = SIGN(pwm_input);
+        PWM_MOTORS_WriteCompare1(abs(pwm_input));
+    }
+    else { // index == 1
+        pwm_sign[1] = SIGN(pwm_input);
+        PWM_MOTORS_WriteCompare2(abs(pwm_input));
+    }
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
     }
 }
 
@@ -596,63 +769,77 @@ void motor_control(uint8 index) {
 //                                                           ANALOG MEASUREMENTS
 //==============================================================================
 
-void analog_read_init(uint8 index) {
-
-    // should I execute the function for this index?
-    if(index >= NUM_OF_ANALOG_INPUTS)
-        return;
-
-    AMUX_FastSelect(index);
-    ADC_StartConvert();
-}
-
-
-void analog_read_end(uint8 index) {
-
-    static int32 value;
-
-    // should I execute the function for this index?
-    if(index >= NUM_OF_ANALOG_INPUTS)
-        return;
-
-    if (ADC_IsEndConversion(ADC_WAIT_FOR_RESULT)) {
-
-        value = (int32) ADC_GetResult16();
-        ADC_StopConvert();
-
-        value -= 1638;  
-        switch(index) {
-
-            // --- Input tension ---
-            case 0:
-                device.tension = value * device.tension_conv_factor;
-                //until there is no valid input tension repeat this measurement
-                if (device.tension < 0) {
-                    device.tension_valid = FALSE;
-                } else {
-                    device.tension_valid = TRUE;
-                    pwm_limit_search();
-                }
-                break;
-
-            // --- Current motor 1 ---
-            case 1:
-                if (device.tension_valid) {
-                    g_meas.curr[0] = filter_i1(((value * 25771) >> 13) * pwm_sign[0]);
-                } else {
-                    g_meas.curr[0] = 0;
-                }
-                break;
-
-            // --- Current motor 2 ---
-            case 2:
-                if (device.tension_valid) {
-                    g_meas.curr[1] = filter_i2(((value * 25771) >> 13) * pwm_sign[1]);
-                } else {
-                    g_meas.curr[1] = 0;
-                }
-                break;
+void analog_read_end() {
+       
+    /* =========================================================================
+    /   Ideal formulation to calculate tension and current
+    /
+    /   tension = ((read_value_mV - offset) * 101) / gain -> [mV]
+    /   current = ((read_value_mV - offset) * 375) / (gain * resistor) -> [mA]
+    /
+    /   Definition:
+    /   read_value_mV = counts_read / 0.819 -> conversion from counts to mV
+    /   offset = 2000 -> hardware amplifier bias in mV
+    /   gain = 8.086 -> amplifier gain
+    /   resistor = 18 -> resistor of voltage divider in KOhm 
+    /
+    /   Real formulation: tradeoff in good performance and accurancy, ADC_buf[] 
+    /   and offset unit of measurment is counts, instead dev_tension and
+    /   g_meas.curr[] are converted in properly unit.
+    /  =========================================================================
+    */
+    
+    // Wait for conversion end
+    while(!ADC_STATUS_Read()){
+        if (interrupt_flag){
+            interrupt_flag = FALSE;
+            interrupt_manager();
         }
+    }
+    
+    // Convert tension read
+    dev_tension = ((int32)(ADC_buf[0] - 1638) * 1952) >> 7;
+    
+    if (interrupt_flag){
+        interrupt_flag = FALSE;
+        interrupt_manager();
+    }
+
+    // Until there is no valid input tension repeat this measurement
+    
+    if (dev_tension > 0){
+        
+        // Set PWM depends on tension
+        pwm_limit_search();
+        
+        // Check Interrupt 
+    
+        if (interrupt_flag){
+            interrupt_flag = FALSE;
+            interrupt_manager();
+        }
+
+        // Filter and Set currents
+        g_meas.curr[0] = filter_i1((int16) pwm_sign[0] * (((int32)(ADC_buf[1] - 1638) * 25771) >> 13));
+        
+        // Check Interrupt 
+    
+        if (interrupt_flag){
+            interrupt_flag = FALSE;
+            interrupt_manager();
+        }
+        g_meas.curr[1] = filter_i2((int16) pwm_sign[1] * (((int32)(ADC_buf[2] - 1638) * 25771) >> 13));
+        
+        // Check Interrupt 
+    
+        if (interrupt_flag){
+            interrupt_flag = FALSE;
+            interrupt_manager();
+        }
+    }
+    else {
+        g_meas.curr[0] = 0;
+        g_meas.curr[1] = 0;
     }
 }
 
@@ -660,75 +847,63 @@ void analog_read_end(uint8 index) {
 //                                                               ENCODER READING
 //==============================================================================
 
-
-void encoder_reading(uint8 index)
+void encoder_reading(const uint8 idx)
 {
-    static uint8 jj;
-
-    static uint32 data_encoder;
-    static int32 value_encoder;
-    static int32 aux;
+    uint8 CYDATA index = idx;
+    
+    uint8 jj;
+    
+    uint32 data_encoder;
+    int32 value_encoder;
+    int32 aux;
 
     static int32 last_value_encoder[NUM_OF_SENSORS];
+
+    static uint8 error[NUM_OF_SENSORS];
+    
+    static CYBIT only_first_time = TRUE;
 
     // static int32 l_value[NUM_OF_SENSORS];   //last value for vel
     // static int32 ll_value[NUM_OF_SENSORS];  //last last value for vel
     // static int32 lll_value[NUM_OF_SENSORS];  //last last last value for vel
-    static int8 only_first_time = 1;
 
-    static uint8 error[NUM_OF_SENSORS];
-
-    if (index >= NUM_OF_SENSORS) {
+    if (index >= NUM_OF_SENSORS)
         return;
-    }
-
+    
     if (reset_last_value_flag) {
-        for (jj = 0; jj < NUM_OF_SENSORS; jj++) {
+        for (jj = NUM_OF_SENSORS; jj--;) {
             last_value_encoder[jj] = 0;
         }
         reset_last_value_flag = 0;
     }
 
     //======================================================     reading sensors
-    switch(index) {
-        case 0:
-            data_encoder = SHIFTREG_ENC_1_ReadData();
-            break;
-
-        case 1:
-            data_encoder = SHIFTREG_ENC_2_ReadData();
-            break;
-
-        case 2:
-            data_encoder = SHIFTREG_ENC_3_ReadData();
-            break;
-
-        case 3:
-            data_encoder = SHIFTREG_ENC_4_ReadData();
-            break;
-    }
-
-    data_encoder = data_encoder & 0x3FFFF;          // reset first 14 bits
+    if (index == 0)
+            data_encoder = SHIFTREG_ENC_1_ReadData() & 0x3FFFF;
+    else {
+        if (index == 1)
+            data_encoder = SHIFTREG_ENC_2_ReadData() & 0x3FFFF;
+        else {
+            if (index == 2)
+                data_encoder = SHIFTREG_ENC_3_ReadData() & 0x3FFFF;
+            else // index == 3
+                data_encoder = SHIFTREG_ENC_4_ReadData() & 0x3FFFF;
+        }
+    }    
 
     if (check_enc_data(&data_encoder)) {
 
-        aux = data_encoder & 0x3FFC0;               // reset last 6 bit
-        value_encoder = 32768 - (aux >> 2);         // shift to have 16 bit val and
-                                                    // subtract half of max value and
-                                                    // invert sign of sensor
-
-        // Add offset and crop to 16bit
-        value_encoder  = (int16)(value_encoder + g_mem.m_off[index]);
+        value_encoder = (int16)(32768 - ((data_encoder & 0x3FFC0) >> 2) + g_mem.m_off[index]);  
 
         // Initialize last_value_encoder
         if (only_first_time) {
             last_value_encoder[index] = value_encoder;
-            if (index == NUM_OF_SENSORS - 1) {
+            
+            if (index == (NUM_OF_SENSORS - 1))
                 only_first_time = 0;
-            }
         }
 
-        // take care of rotations
+        // Take care of rotations
         aux = value_encoder - last_value_encoder[index];
 
         // ====================== 1 TURN ======================
@@ -749,29 +924,30 @@ void encoder_reading(uint8 index)
         // to go slower than 1/4 turn every ms -> 1 turn every 4ms
         // equal to 250 turn/s -> 15000 RPM
 
-        if (aux > 49152) {
+        if (aux > 49152)
             g_meas.rot[index]--;
-        } else  if (aux < -49152) {
-            g_meas.rot[index]++;
-        } else if (abs(aux) > 16384) { // if two measure are too far
-            error[index]++;
-            if (error[index] < 10) {
-                // Discard
-                return;
+        else{ 
+            if (aux < -49152)
+                g_meas.rot[index]++;
+            else{
+                if (abs(aux) > 16384) { // if two measure are too far
+                    error[index]++;
+                    if (error[index] < 10)
+                        // Discard
+                        return;
+                }
             }
-            error[index] = 0;
         }
+        
         error[index] = 0;
-
-
+        
         last_value_encoder[index] = value_encoder;
 
         value_encoder += (int32)g_meas.rot[index] << 16;
 
-        if (c_mem.m_mult[index] != 1.0) {
+        if (c_mem.m_mult[index] != 1.0)
             value_encoder *= c_mem.m_mult[index];
-        }
-
+      
         g_meas.pos[index] = value_encoder;
     }
 
@@ -820,11 +996,11 @@ void calibration()
             old_k_d = c_mem.k_d;
 
             // goto to zero position
-            g_ref.pos[0] = 0;
-            g_ref.pos[1] = 0;
+            g_refNew.pos[0] = 0;
+            g_refNew.pos[1] = 0;
 
             // Activate motors
-            if (!(g_ref.onoff & 0x03)) {
+            if (!(g_refNew.onoff & 0x03)) {
                 MOTOR_ON_OFF_Write(0x03);
             }
 
@@ -849,8 +1025,8 @@ void calibration()
 
         case CONTINUE_1:
             // increment of 0.5 degree
-            g_ref.pos[0] += 65536 / 720;
-            g_ref.pos[1] -= 65536 / 720;
+            g_refNew.pos[0] += 65536 / 720;
+            g_refNew.pos[1] -= 65536 / 720;
 
             // check if one of the motors reach the threashold
             if ((g_meas.curr[0] > CALIB_CURRENT) || (g_meas.curr[1] > CALIB_CURRENT)) {
@@ -863,8 +1039,8 @@ void calibration()
                 c_mem.k_d = old_k_d;
 
                 // go back to zero position
-                g_ref.pos[0] = 0;
-                g_ref.pos[1] = 0;
+                g_refNew.pos[0] = 0;
+                g_refNew.pos[1] = 0;
 
                 // wait for motors to reach zero position
                 calibration_flag = PAUSE_2;
@@ -883,7 +1059,7 @@ void calibration()
 
         case CONTINUE_2:
             // Deactivate motors
-            if (!(g_ref.onoff & 0x03)) {
+            if (!(g_refNew.onoff & 0x03)) {
                 MOTOR_ON_OFF_Write(0x00);
             }
 
@@ -908,15 +1084,18 @@ void calibration()
 //==============================================================================
 
 void pwm_limit_search() {
-    uint8 index;
+    
+    uint8 CYDATA index;
 
-    if (device.tension > 25500) {
-        device.pwm_limit = 0;
-    } else if (device.tension < 8000) {
-        device.pwm_limit = 100;
-    } else {
-        index = (uint8)((device.tension - 8000) / 500);
-        device.pwm_limit = hitech_pwm_preload_values[index];
+    if (dev_tension > 25500)    // Max value 
+        dev_pwm_limit = 0;
+    else{ 
+        if (dev_tension < 8000) // Min value
+            dev_pwm_limit = 100;
+        else {                  
+            index = (uint8)((dev_tension - 8000) >> 9);
+            dev_pwm_limit = hitech_pwm_preload_values[index];
+        }
     }
 }
 
