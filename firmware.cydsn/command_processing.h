@@ -11,7 +11,7 @@
 // Project Manager(s):  Fabio Bonomo and Felipe Belo
 //
 // Soft. Ver:           0.1b4
-// Date:                2012-02-06
+// Date:                Dic. 1, 2015
 //
 // This version changes:
 //      - not reported
@@ -33,18 +33,36 @@
 //                                                          function definitions
 //==============================================================================
 
+void	setZeros 			(void);
+void	get_param_list		(uint16 index); 	
+void    infoPrepare        	(unsigned char *);
+void    infoGet            	(uint16);
+void    commProcess        	();
+void    commWrite          	(uint8*, const uint16);
+void    commWrite_old_id    (uint8*, const uint16, uint8);
+uint8   memStore           	(int);
+void    sendAcknowledgment 	(const uint8);
+void    memRecall          	(void);
+uint8   memRestore         	(void);
+uint8   memInit            	(void);
 
-void     paramSet           (uint16 param_type);
-void     paramGet           (uint16 param_type);
-void     infoPrepare        (unsigned char *info_string);
-void     infoGet            (uint16 info_typea);
-void     commProcess        (void);
-void     commWrite          (uint8 *packet_data, uint16 packet_lenght);
-uint8    memStore           (int);
-void     sendAcknowledgment (uint8 value);
-void     memRecall          (void);
-uint8    memRestore         (void);
-uint8    memInit            (void);
+//==============================================================================
+//                                            Service Routine interrupt function
+//==============================================================================
+
+void cmd_get_measurements();
+void cmd_get_inputs();
+void cmd_get_currents();
+void cmd_get_curr_and_meas();
+void cmd_set_inputs();
+void cmd_set_pos_stiff();
+void cmd_get_velocities();
+void cmd_activate();
+void cmd_set_watchdog();
+void cmd_get_activate();
+void cmd_ping();
+void cmd_store_params();
+void cmd_set_baudrate();
 
 #endif
 

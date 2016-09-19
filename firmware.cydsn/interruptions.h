@@ -7,7 +7,7 @@
 * \file         interruptions.h
 *
 * \brief        Interruptions header file.
-* \date         Feb 06, 2012
+* \date         Dic. 1, 2015
 * \author       qbrobotics
 * \copyright    (C)  qbrobotics. All rights reserved.
 */
@@ -19,21 +19,24 @@
 //=================================================================     includes
 #include <globals.h> // ALL GLOBAL DEFINITIONS, STRUCTURES AND MACROS HERE
 
-//=====================================================     function declaration
+//=====================================================        Interrupt Handler
+    
 CY_ISR_PROTO(ISR_RS485_RX_ExInterrupt);
+CY_ISR_PROTO(ISR_WATCHDOG_Handler);
 
+//=====================================================     function declaration
 
 void function_scheduler(void);
 
-void analog_read_init(uint8 index);
-void analog_read_end(uint8 index);
-
-void encoder_reading(uint8 i);
-void motor_control(uint8 index);
+void encoder_reading(const uint8);
+void motor_control(const uint8);
+void analog_read_end();
 
 void calibration(void);
 
 void pwm_limit_search();
+
+void interrupt_manager();
 
 // ----------------------------------------------------------------------------
 #endif
