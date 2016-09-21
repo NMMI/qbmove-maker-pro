@@ -1,9 +1,0 @@
-Last Modified Date & Time: 11/24/2015 09:25:21
-
-firmware: TopDesign.cysch
-	Bootloadable [v1.40] to [v1.40]
-
-firmware: firmware.cydwr
-	cy_boot [v5.0] to [v5.20]
-
-
