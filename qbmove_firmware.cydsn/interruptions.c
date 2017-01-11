@@ -643,7 +643,7 @@ void motor_control(const uint8 idx) {
 
             // Proportional
             if (k_p_c != 0)
-                pwm_input += (int32)(k_p * curr_error) >> 16;
+                pwm_input += (int32)(k_p_c * curr_error) >> 16;
 
             // Integral
             if (k_i_c != 0)
